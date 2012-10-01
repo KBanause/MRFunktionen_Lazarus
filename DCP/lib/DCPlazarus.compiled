@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<CONFIG>
+  <Compiler Value="S:\fpc\bin\i386-win32\fpc.exe" Date="1044491804"/>
+  <Params Value=" -MDelphi -Sghi -O1 -gl -vewnhi -l -FuS:\Packages\DCP\Ciphers -FuS:\Packages\DCP\Hashes -FuS:\Packages\DCP\lib -FuS:\lazarus\lcl\units\i386-win32 -FuS:\lazarus\lcl\units\i386-win32\gtk2 -FuS:\lazarus\packager\units\i386-win32 -FuS:\Packages\DCP\ -FUS:\Packages\DCP\lib\ -dLCL -dLCLgtk2 dcplazarus.pas"/>
+</CONFIG>
