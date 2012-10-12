@@ -10,7 +10,16 @@ unit MRFunktionen;
 
 interface
 
-uses SysUtils, StrUtils, Classes;
+uses
+  SysUtils,
+  StrUtils,
+  {$IFDEF WINDOWS}
+  windows,
+  {$ENDIF}
+  {$IFDEF UNIX}
+
+  {$ENDIF}
+  Classes;
 
 const
   OSBIT = 32{$IFDEF CPU64} + 32{$ENDIF};
@@ -76,10 +85,11 @@ procedure Swap(var p1, p2: Extended); overload;
 procedure Swap(var p1, p2: Int64); overload;
 procedure Swap(var p1, p2: Pointer); overload;
 procedure Swap(var p1, p2: string); overload;
+procedure GetCurrentScreen(var Index: Integer; var Extends: TRect);
 
 implementation
 
-uses DateUtils;
+uses DateUtils, Forms;
 
 {Funktionen und Prozeduren}
 
@@ -801,6 +811,18 @@ begin
   s := p1;
   p1 := p2;
   p2 := s;
+end;
+
+procedure GetCurrentScreen(var Index: Integer; var Extends: TRect);
+var
+  MonitorMouse                : TMonitor;
+  MousePosition               : TPoint;
+begin
+  GetCursorPos(MousePosition);
+  MonitorMouse := Screen.MonitorFromPoint(MousePosition);
+
+  Index := MonitorMouse.MonitorNum;
+  Extends := MonitorMouse.WorkareaRect;
 end;
 
 procedure Swap(var p1, p2: Extended);
