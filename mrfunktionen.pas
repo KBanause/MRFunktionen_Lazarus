@@ -108,7 +108,8 @@ uses DateUtils,
   unix,
   baseunix,
   {$ENDIF}
-     Forms;
+  Forms,
+  Controls;
 
 {Funktionen und Prozeduren}
 
@@ -592,7 +593,7 @@ begin
   SetLength(ResArray, 0);
   Index := 0;
   ALen := Limit;
-  
+
   if Length(Werte) > 0 then
   begin
     if Trenner = '' then
@@ -622,7 +623,7 @@ begin
         SetString(s, F, P - F);
         ResArray[Index] := StrToIntDef(s, 0);
         inc(Index);
-        
+
         if P^ <> #0 then
           inc(P, SepLen);
       end;
@@ -669,10 +670,10 @@ begin
       Inc(ALen, 5);
       SetLength(ResArray, ALen);
     end;
-    
+
     SetString(ResArray[Index], F, P - F);
     Inc(Index);
-    
+
     if P^ <> #0 then
       Inc(P, SepLen);
   end;
@@ -783,7 +784,7 @@ var
   j                           : Integer;
 begin
   j := 0;
-  
+
   if (not Reverse) then
     Result := PosEx(SubStr, S, Offset)
   else
@@ -837,11 +838,11 @@ var
   MonitorMouse                : TMonitor;
   MousePosition               : TPoint;
 begin
-  GetCursorPos(MousePosition);
-  MonitorMouse := Screen.MonitorFromPoint(MousePosition);
+  MousePosition := Mouse.CursorPos;
+  MonitorMouse := Screen.MonitorFromPoint(MousePosition, mdPrimary);
 
   Index := MonitorMouse.MonitorNum;
-  Extends := MonitorMouse.WorkareaRect;
+  Extends := Rect(MonitorMouse.Left, MonitorMouse.Top, MonitorMouse.Left + MonitorMouse.Width, MonitorMouse.Top + MonitorMouse.Height);
 end;
 
 procedure Swap(var p1, p2: Extended);
@@ -1137,7 +1138,7 @@ begin
   end;
 
   {$IFNDEF WINDOWS}
-  Result.FileVersion := SPVERSION;
+  Result.FileVersion := defVersion;
   {$ELSE}
   // Get the file type
   if SHGetFileInfo(PChar(sAppNamePath), 0, rSHFI, SizeOf(rSHFI), SHGFI_TYPENAME) <> 0 then
