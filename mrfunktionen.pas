@@ -13,7 +13,8 @@ interface
 uses
   SysUtils,
   StrUtils,
-  Classes;
+  Classes,
+  registry;
 
 const
   OSBIT = 32{$IFDEF CPU64} + 32{$ENDIF};
@@ -47,6 +48,15 @@ type
     InfoInferred: Boolean;
   end;
 
+  { TMRRegistry }
+
+  TMRRegistry = class(TRegistry)
+  public
+    procedure SetCurrentKey(Value: HKEY);
+    function DeleteKey(const Key: string): Boolean; overload;
+    function DeleteKey(const Key: string; const recursive: Boolean): Boolean; overload;
+  end;
+
 function Between(Value, Min, Max: Integer): Boolean; overload;
 function Between(Value, Min, Max: Integer; excl: Boolean): Boolean; overload;
 function BinaryToHexStr(BinWert: string): string;
@@ -59,6 +69,10 @@ function GetBaseName: string; overload;
 function GetConfigFileName(AppName: string; ConfigFileExtension: string): string;
 function GetConfigFileName(ConfigFileExtension: string): string;
 function GetConfigFileName: string;
+function GetCurrentVersion(dateiname: string): string; overload;
+function GetCurrentVersion: string; overload;
+function GetDefaultCaption(AppName: String): String; overload;
+function GetDefaultCaption(AppName: String; withVersion: Boolean): String; overload;
 function GetOSBit: Byte;
 function GetOwnDir(progname: string): string; overload;
 function GetOwnDir: string; overload;
@@ -78,11 +92,15 @@ function OsterSonntag(Jahr: Integer): TDateTime;
 function ReplaceStr(SubStr: string; Str: string; NewStr: string; RepAll: Boolean = false): string;
 function ReplaceString(SubStr: string; Str: string; NewStr: string; RepAll: Boolean = false): string;
 function ReverseString(Str: string): string;
+function StartProgramm(ExeFile, Dir, Parameter: string): Boolean; overload;
+function StartProgramm(ExeFile, Dir, Parameter: string; wartezeit: Cardinal): Boolean; overload;
+function StartProgramm(ExeFile, Dir, Parameter: string; wartezeit: Cardinal; var pid: Integer): Boolean; overload;
 function StringToHex(str: string): string;
 function Trenn1000er(Wert: Int64): string;
 
 procedure Chomp(var Str: string);
 procedure CopyArray(srcArray: TStrArray; startPosSrc: Integer; var dstArray: TStrArray; startPosDst: Integer; anzahl: Integer);
+procedure CopyRegKey(RegistryObject: TRegistry; OldName, NewName: String);
 procedure Explode(const Werte, Trenner: string; var ResArray: TDblArray; DblSep: TDblSep; Limit: Integer = 0; const EndeElement: Boolean = false); overload;
 procedure Explode(const Werte, Trenner: string; var ResArray: TIntArray; Limit: Integer = 0; const EndeElement: Boolean = false); overload;
 procedure Explode(const Werte, Trenner: string; var ResArray: TStrArray; Limit: Integer = 0; const EndeElement: Boolean = false); overload;
@@ -216,6 +234,61 @@ end;
 function GetConfigFileName: string;
 begin
   Result := GetConfigFileName(ApplicationName, ConfigExtension);
+end;
+
+function GetCurrentVersion(dateiname: string): string;
+var
+  iSize                       : Integer;
+  data                        : Pointer;
+  dw                          : DWord;
+  FileInfo                    : PVSFixedFileInfo;
+  s                           : string;
+begin
+  Result := '?';
+  s := dateiname;
+
+  iSize := GetFileVersionInfoSize(PChar(s), dw);
+
+  if iSize > 0 then
+  begin
+    GetMem(data, iSize);
+
+    if GetFileVersionInfo(PChar(s), 0, iSize, data) then
+    begin
+      if VerQueryValue(data, '\', Pointer(FileInfo), dw) then
+        Result := Format('%d.%d.%d.%d', [(FileInfo^.dwFileVersionMS shr 16),
+          (FileInfo^.dwFileVersionMS and $FFFF),
+            (FileInfo^.dwFileVersionLS shr 16),
+            (FileInfo^.dwFileVersionLS and $FFFF)]);
+
+    end; // if GetFileVersionInfo(PChar(ParamStr(0)), 0, iSize, data)
+
+    FreeMem(data, iSize);
+  end; // if iSize>0
+end;
+
+function GetCurrentVersion: string;
+begin
+  Result := GetCurrentVersion(ParamStr(0));
+end;
+
+function GetDefaultCaption(AppName: String): String;
+begin
+  Result := GetDefaultCaption(AppName, False);
+end;
+
+function GetDefaultCaption(AppName: String; withVersion: Boolean): String;
+var
+  ver: String;
+begin
+  ver := '';
+
+  if (withVersion) then
+  begin
+    ver := Format(' v%s', [GetCurrentVersion]);
+  end; // if (withVersion)
+
+  Result := Format('%s%s (%dbit)', [AppName, ver, GetOSBit]);
 end;
 
 function GetOSBit: Byte;
@@ -534,6 +607,142 @@ begin
   Result := Format('%0.0n', [Wert * 1.0]);
 end;
 
+procedure CopyRegKey(RegistryObject: TRegistry; OldName, NewName: String);
+var
+  SrcKey, DestKey: HKEY;
+  Delete: Boolean;
+  reginit: TMRRegistry;
+
+  procedure MoveValue(RegistryObject: TMRRegistry; SrcKey, DestKey: HKEY; const Name: string);
+  var
+    Len: Integer;
+    OldKey, PrevKey: HKEY;
+    Buffer: PChar;
+    RegData: TRegDataType;
+  begin
+    OldKey := RegistryObject.CurrentKey;
+    RegistryObject.SetCurrentKey(SrcKey);
+    try
+      Len := RegistryObject.GetDataSize(Name);
+      if Len > 0 then
+      begin
+        Buffer := AllocMem(Len);
+        try
+          Len := RegistryObject.GetData(Name, Buffer, Len, RegData);
+          PrevKey := RegistryObject.CurrentKey;
+          RegistryObject.SetCurrentKey(DestKey);
+          try
+            RegistryObject.PutData(Name, Buffer, Len, RegData);
+          finally
+            RegistryObject.SetCurrentKey(PrevKey);
+          end;
+        finally
+          FreeMem(Buffer);
+        end;
+      end;
+    finally
+      RegistryObject.SetCurrentKey(OldKey);
+    end;
+  end;
+
+  procedure CopyValues(RegistryObject: TMRRegistry; SrcKey, DestKey: HKEY);
+  var
+    Len: DWORD;
+    I: Integer;
+    KeyInfo: TRegKeyInfo;
+    S: string;
+    OldKey: HKEY;
+  begin
+    OldKey := RegistryObject.CurrentKey;
+    RegistryObject.SetCurrentKey(SrcKey);
+    try
+      if RegistryObject.GetKeyInfo(KeyInfo) then
+      begin
+        MoveValue(RegistryObject, SrcKey, DestKey, '');
+        SetString(S, nil, KeyInfo.MaxValueLen + 1);
+        for I := 0 to KeyInfo.NumValues - 1 do
+        begin
+          Len := KeyInfo.MaxValueLen + 1;
+          if RegEnumValue(SrcKey, I, PChar(S), Len, nil, nil, nil, nil) = ERROR_SUCCESS then
+            MoveValue(RegistryObject, SrcKey, DestKey, PChar(S));
+        end;
+      end;
+    finally
+      RegistryObject.SetCurrentKey(OldKey);
+    end;
+  end;
+
+  procedure CopyKeys(RegistryObject: TMRRegistry; SrcKey, DestKey: HKEY);
+  var
+    Len: DWORD;
+    I: Integer;
+    Info: TRegKeyInfo;
+    S: string;
+    OldKey, PrevKey, NewSrc, NewDest: HKEY;
+  begin
+    OldKey := RegistryObject.CurrentKey;
+    RegistryObject.SetCurrentKey(SrcKey);
+    try
+      if RegistryObject.GetKeyInfo(Info) then
+      begin
+        SetString(S, nil, Info.MaxSubKeyLen + 1);
+        for I := 0 to Info.NumSubKeys - 1 do
+        begin
+          Len := Info.MaxSubKeyLen + 1;
+          if RegEnumKeyEx(SrcKey, I, PChar(S), Len, nil, nil, nil, nil) = ERROR_SUCCESS then
+          begin
+            NewSrc := RegistryObject.GetKey(PChar(S));
+            if NewSrc <> 0 then
+            try
+              PrevKey := RegistryObject.CurrentKey;
+              RegistryObject.SetCurrentKey(DestKey);
+              try
+                RegistryObject.CreateKey(PChar(S));
+                NewDest := RegistryObject.GetKey(PChar(S));
+                try
+                  CopyValues(RegistryObject, NewSrc, NewDest);
+                  CopyKeys(RegistryObject, NewSrc, NewDest);
+                finally
+                  RegCloseKey(NewDest);
+                end;
+              finally
+                RegistryObject.SetCurrentKey(PrevKey);
+              end;
+            finally
+              RegCloseKey(NewSrc);
+            end;
+          end;
+        end;
+      end;
+    finally
+      RegistryObject.SetCurrentKey(OldKey);
+    end;
+  end;
+
+begin
+  Delete := false;
+  reginit := TMRRegistry(RegistryObject);
+  if reginit.KeyExists(OldName) and not reginit.KeyExists(NewName) then
+  begin
+    SrcKey := reginit.GetKey(OldName);
+    if SrcKey <> 0 then
+    try
+      reginit.CreateKey(NewName);
+      DestKey := reginit.GetKey(NewName);
+      if DestKey <> 0 then
+      try
+        CopyValues(reginit, SrcKey, DestKey);
+        CopyKeys(reginit, SrcKey, DestKey);
+        //if Delete then DeleteKey(OldName);
+      finally
+        RegCloseKey(DestKey);
+      end;
+    finally
+      RegCloseKey(SrcKey);
+    end;
+  end;
+end;
+
 procedure Explode(const Werte, Trenner: string; var ResArray: TDblArray; DblSep: TDblSep; Limit: Integer = 0; const EndeElement: Boolean = false);
 var
   SepLen                      : Integer;
@@ -842,7 +1051,7 @@ begin
   MonitorMouse := Screen.MonitorFromPoint(MousePosition, mdPrimary);
 
   Index := MonitorMouse.MonitorNum;
-  Extends := Rect(MonitorMouse.Left, MonitorMouse.Top, MonitorMouse.Left + MonitorMouse.Width, MonitorMouse.Top + MonitorMouse.Height);
+  Extends := Classes.Rect(MonitorMouse.Left, MonitorMouse.Top, MonitorMouse.Left + MonitorMouse.Width, MonitorMouse.Top + MonitorMouse.Height);
 end;
 
 procedure Swap(var p1, p2: Extended);
@@ -876,6 +1085,44 @@ begin
   begin
     sa[i] := IntToStr(ia[i]);
   end; // for i := 0 to High(sa)
+end;
+
+function StartProgramm(ExeFile, Dir, Parameter: string): Boolean;
+begin
+  Result := StartProgramm(ExeFile, Dir, Parameter, INFINITE);
+end;
+
+function StartProgramm(ExeFile, Dir, Parameter: string; wartezeit: Cardinal
+  ): Boolean;
+var
+  hndl: Integer;
+begin
+  Result := StartProgramm(ExeFile, Dir, Parameter, wartezeit, hndl);
+end;
+
+function StartProgramm(ExeFile, Dir, Parameter: string; wartezeit: Cardinal;
+  var pid: Integer): Boolean;
+var
+  si                          : TStartupInfo;
+  pi                          : TProcessInformation;
+  b                           : Boolean;
+begin
+  FillChar(si, SizeOf(TStartupInfo), 0);
+  si.cb := SizeOf(TStartupInfo);
+  pid := 0;
+
+  b := CreateProcess(nil, PChar(Format('"%s" %s', [ExeFile, Parameter])), nil, nil, False,
+    NORMAL_PRIORITY_CLASS, nil, PChar(Dir), si, pi);
+
+  if b then
+  begin
+    pid := pi.dwProcessId;
+    WaitForSingleObject(pi.hProcess, wartezeit);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  end;
+
+  Result := b;
 end;
 
 function StringToHex(str: string): string;
@@ -1216,6 +1463,67 @@ end;
 function GetBaseName: string;
 begin
   Result := GetBaseName(ExpandFileName(ParamStr(0)));
+end;
+
+function TMRRegistry.DeleteKey(const Key: string): Boolean;
+begin
+  Result := DeleteKey(Key, false);
+end;
+
+function TMRRegistry.DeleteKey(const Key: string; const recursive: Boolean
+  ): Boolean;
+var
+  sl: TStringList;
+  i: Integer;
+  b: Boolean;
+  c: Boolean;
+  s: String;
+begin
+  OpenKey(Key, false);
+
+  if (not recursive) then
+  begin
+    Result := inherited DeleteKey(Key);
+  end // if (not recursive)
+  else
+  begin
+    if (not HasSubKeys) then
+    begin
+      Result := inherited DeleteKey(Key);
+    end // if (not HasSubKeys)
+    else
+    begin
+      b := True;
+      c := True;
+      sl := TStringList.Create;
+      GetKeyNames(sl);
+      s := sl.Text;
+
+      for i := 0 to sl.Count - 1 do
+      begin
+        b := DeleteKey(IncludeTrailingPathDelimiter(Key) + sl[i], recursive);
+
+        if (c) then
+        begin
+          c := b;
+        end; // if (Result)
+      end; // for i := 0 to sl.Count - 1
+
+      b := DeleteKey(Key, recursive);
+
+      if (c) then
+      begin
+        c := b;
+      end; // if (Result)
+
+      Result := c;
+    end; // else if (not HasSubKeys)
+  end; // else if (not recursive)
+end;
+
+procedure TMRRegistry.SetCurrentKey(Value: HKEY);
+begin
+  inherited;
 end;
 
 end.
