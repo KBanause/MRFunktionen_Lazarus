@@ -60,6 +60,8 @@ type
 function Between(Value, Min, Max: Integer): Boolean; overload;
 function Between(Value, Min, Max: Integer; excl: Boolean): Boolean; overload;
 function BinaryToHexStr(BinWert: string): string;
+function ConnectNetworkDrive(const ADrive: Char; const ADirectory, AUsername, APassword: string; const ARestoreAtLogon: Boolean): Boolean; overload;
+function ConnectNetworkDrive(const ADrive: string; const ADirectory, AUsername, APassword: string; const ARestoreAtLogon: Boolean): Boolean; overload;
 function CreateConfigFile(AppName: string; ConfigFileExtension: string): string;
 function CreateConfigFile(ConfigFileExtension: string): string;
 function CreateConfigFile: string;
@@ -73,6 +75,7 @@ function GetCurrentVersion(dateiname: string): string; overload;
 function GetCurrentVersion: string; overload;
 function GetDefaultCaption(AppName: String): String; overload;
 function GetDefaultCaption(AppName: String; withVersion: Boolean): String; overload;
+function GetLocalIPs(const Lines: TStrings): Boolean;
 function GetOSBit: Byte;
 function GetOwnDir(progname: string): string; overload;
 function GetOwnDir: string; overload;
@@ -121,6 +124,7 @@ uses DateUtils,
   {$IFDEF WINDOWS}
   windows,
   ShellApi,
+  winsock,
   {$ENDIF}
   {$IFDEF UNIX}
   unix,
@@ -289,6 +293,38 @@ begin
   end; // if (withVersion)
 
   Result := Format('%s%s (%dbit)', [AppName, ver, GetOSBit]);
+end;
+
+function GetLocalIPs(const Lines: TStrings): Boolean;
+type
+  PPInAddr = ^PInAddr;
+var
+  wsaData                     : TWSAData;
+  HostInfo                    : PHostEnt;
+  HostName                    : array[0..255] of Char;
+  Addr                        : PPInAddr;
+begin
+  Result := False;
+  Lines.Clear;
+  if WSAStartup($0102, wsaData) = 0 then
+  try
+    if gethostname(HostName, SizeOf(HostName)) = 0 then
+    begin
+      HostInfo := gethostbyname(HostName);
+      if HostInfo <> nil then
+      begin
+        Addr := Pointer(HostInfo^.h_addr_list);
+        if (Addr <> nil) and (Addr^ <> nil) then
+          repeat
+            Lines.Add(StrPas(inet_ntoa(Addr^^)));
+            inc(Addr);
+          until Addr^ = nil;
+      end;
+    end;
+    Result := True;
+  finally
+    WSACleanup;
+  end;
 end;
 
 function GetOSBit: Byte;
@@ -1208,6 +1244,54 @@ begin
   begin
     dstArray[i - diff] := srcArray[i];
   end;
+end;
+
+function ConnectNetworkDrive(const ADrive: Char; const ADirectory, AUsername,
+  APassword: string; const ARestoreAtLogon: Boolean): Boolean;
+var
+  NetResource                 : TNetResource;
+  dwFlags                     : DWORD;
+  lPwd, lUser                 : PChar;
+  number : Byte;
+begin
+  number := Ord(ADrive) - Ord('A');
+
+  if (1 shl number and GetLogicalDrives <> 0) then
+  begin
+    Result := False;
+    exit;
+  end;
+
+  NetResource.dwType := RESOURCETYPE_DISK;
+  NetResource.lpLocalName := PChar(Format('%s:', [ADrive]));
+  NetResource.lpRemoteName := PChar(ADirectory);
+  NetResource.lpProvider := nil;
+
+  if ARestoreAtLogon then
+    dwFlags := CONNECT_UPDATE_PROFILE
+  else
+    dwFlags := 0;
+
+  if AUsername <> '' then
+    lUser := PChar(AUsername)
+  else
+    lUser := nil;
+
+  if APassword <> '' then
+    lPwd := PChar(APassword)
+  else
+    lPwd := nil;
+
+  Result := WNetAddConnection2(NetResource, lPwd, lUser, dwFlags) = NO_ERROR;
+end;
+
+function ConnectNetworkDrive(const ADrive: string; const ADirectory, AUsername,
+  APassword: string; const ARestoreAtLogon: Boolean): Boolean;
+var
+  ch: Char;
+begin
+  ch := ADrive[1];
+  Result := ConnectNetworkDrive(ch, ADirectory, AUsername, APassword, ARestoreAtLogon);
 end;
 
 function CreateConfigFile(AppName: string; ConfigFileExtension: string): string;

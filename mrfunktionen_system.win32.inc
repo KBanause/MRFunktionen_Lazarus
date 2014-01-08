@@ -219,3 +219,36 @@ begin
     sl.Free;
   end; // if (sl <> List)
 end;
+
+function GetProcessID(Exename: string): DWORD;
+var
+  hProcSnap                   : THandle;
+  pe32                        : TProcessEntry32;
+begin
+  result := 0;
+  hProcSnap := CreateToolHelp32SnapShot(TH32CS_SNAPPROCESS, 0);
+  if hProcSnap <> INVALID_HANDLE_VALUE then
+  begin
+    pe32.dwSize := SizeOf(ProcessEntry32);
+    if Process32First(hProcSnap, pe32) = true then
+    begin
+      while Process32Next(hProcSnap, pe32) = true do
+      begin
+        if pos(Exename, pe32.szExeFile) <> 0 then
+          result := pe32.th32ProcessID;
+      end;
+    end;
+    CloseHandle(hProcSnap);
+  end;
+end;
+
+function GetProcessHandleFromID(ID: DWORD): THandle;
+begin
+  result := OpenProcess(SYNCHRONIZE, False, ID);
+  CloseHandle(result);
+end;
+
+function ProgrammIsRunning(ExeFile: string): Boolean;
+begin
+  Result := (GetProcessHandleFromID(GetProcessID(ExeFile)) > 0);
+end;
