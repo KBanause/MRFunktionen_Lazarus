@@ -950,9 +950,15 @@ function TMRXMLNode.GetAsString: MRXMLString;
 var
   s: MRXMLString;
 begin
-  SetLength(s, FValueStream.Size);
-  FValueStream.Position := 0;
-  FValueStream.Read(s[1], FValueStream.Size);
+  s := '';
+
+  if (FValueStream.Size > 0) then
+  begin
+    SetLength(s, FValueStream.Size);
+    FValueStream.Position := 0;
+    FValueStream.Read(s[1], FValueStream.Size);
+  end;
+
   Result := s;
 end;
 

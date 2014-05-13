@@ -19,7 +19,7 @@ procedure GetUserNamesOnSystem(List: TStrings; WithDisabledUsers: Boolean);
 implementation
 
 {$IFDEF WINDOWS}
-  {$I mrfunktionen_system.win32.inc}end;
+  {$I mrfunktionen_system.win32.inc}
 
 {$ENDIF WINDOWS}
 {$IFDEF UNIX}

@@ -1,5 +1,5 @@
 uses
-  windows, winsock, ActiveX;
+  windows, winsock, ActiveX, jwatlhelp32;
 
 type
   NET_API_STATUS    = DWORD;

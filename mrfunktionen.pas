@@ -13,7 +13,8 @@ interface
 uses
   SysUtils,
   StrUtils,
-  Classes,
+  Classes, types,
+  Forms,
   registry;
 
 const
@@ -82,6 +83,8 @@ function GetOwnDir: string; overload;
 function GetRandomString(laenge: Integer): string; overload;
 function GetRandomString(laenge: Integer; lesbarezeichen: Boolean): string; overload;
 function GetRandomString(laenge: Integer; zeichen: string): string; overload;
+function GetWorkingMonitorNumber: Integer;
+function GetWorkingMonitorExtends: TRect;
 function HexStrToBinary(HexWert: string): string;
 function HexToInt(HexWert: string): Integer;
 function HexToInt64(HexWert: string): Int64;
@@ -102,6 +105,7 @@ function StringToHex(str: string): string;
 function Trenn1000er(Wert: Int64): string;
 
 procedure Chomp(var Str: string);
+procedure CenterFormOnWorkingMonitor(var Form: TForm);
 procedure CopyArray(srcArray: TStrArray; startPosSrc: Integer; var dstArray: TStrArray; startPosDst: Integer; anzahl: Integer);
 procedure CopyRegKey(RegistryObject: TRegistry; OldName, NewName: String);
 procedure Explode(const Werte, Trenner: string; var ResArray: TDblArray; DblSep: TDblSep; Limit: Integer = 0; const EndeElement: Boolean = false); overload;
@@ -130,7 +134,6 @@ uses DateUtils,
   unix,
   baseunix,
   {$ENDIF}
-  Forms,
   Controls;
 
 {Funktionen und Prozeduren}
@@ -359,6 +362,30 @@ end;
 function GetRandomString(laenge: Integer): string;
 begin
   Result := GetRandomString(laenge, false);
+end;
+
+function GetWorkingMonitorNumber: Integer;
+var
+  cpos: types.TPoint;
+  i: Integer;
+  numb: Integer;
+  mon: TMonitor;
+begin
+  cpos := Mouse.CursorPos;
+  numb := 0;
+
+  mon  := Screen.MonitorFromPoint(cpos);
+
+  Result := mon.MonitorNum;
+end;
+
+function GetWorkingMonitorExtends: TRect;
+var
+  cpos: types.TPoint;
+begin
+  cpos := Mouse.CursorPos;
+
+  Result := Screen.MonitorFromPoint(cpos).WorkareaRect;
 end;
 
 function HexStrToBinary(HexWert: string): string;
@@ -1231,6 +1258,15 @@ end;
 function Between(Value, Min, Max: Integer): Boolean;
 begin
   Result := Between(Value, Min, Max, False);
+end;
+
+procedure CenterFormOnWorkingMonitor(var Form: TForm);
+var
+  re: TRECT;
+begin
+  re := GetWorkingMonitorExtends;
+  Form.Left := (re.Left + re.Right) div 2 - Form.Width div 2;
+  Form.Top  := (re.Top + re.Bottom) div 2 - Form.Height div 2;
 end;
 
 procedure CopyArray(srcArray: TStrArray; startPosSrc: Integer; var dstArray: TStrArray; startPosDst: Integer; anzahl: Integer);
