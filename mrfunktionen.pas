@@ -105,7 +105,8 @@ function StringToHex(str: string): string;
 function Trenn1000er(Wert: Int64): string;
 
 procedure Chomp(var Str: string);
-procedure CenterFormOnWorkingMonitor(var Form: TForm);
+procedure CenterFormAroundMouse(Form: TForm);
+procedure CenterFormOnWorkingMonitor(Form: TForm);
 procedure CopyArray(srcArray: TStrArray; startPosSrc: Integer; var dstArray: TStrArray; startPosDst: Integer; anzahl: Integer);
 procedure CopyRegKey(RegistryObject: TRegistry; OldName, NewName: String);
 procedure Explode(const Werte, Trenner: string; var ResArray: TDblArray; DblSep: TDblSep; Limit: Integer = 0; const EndeElement: Boolean = false); overload;
@@ -1260,7 +1261,48 @@ begin
   Result := Between(Value, Min, Max, False);
 end;
 
-procedure CenterFormOnWorkingMonitor(var Form: TForm);
+procedure CenterFormAroundMouse(Form: TForm);
+var
+  re: TRECT;
+  mouse_pos: types.TPoint;
+  new_pos: types.TPoint;
+  wind_rect: TRect;
+  height: Integer;
+  width: Integer;
+begin
+  mouse_pos := Mouse.CursorPos;
+  re := GetWorkingMonitorExtends;
+  new_pos.x := mouse_pos.x - Form.Width div 2;
+  new_pos.y := mouse_pos.y - Form.Height div 2;
+  GetWindowRect(Form.Handle, wind_rect);
+  height := wind_rect.Bottom - wind_rect.Top + 1;
+  width := wind_rect.Right - wind_rect.Left + 1;
+
+  if (new_pos.x < re.Left) then
+  begin
+    new_pos.x := re.Left;
+  end;
+
+  if (new_pos.y < re.Top) then
+  begin
+    new_pos.y := re.Top;
+  end; // if (new_pos.y < re.Top)
+
+  if ((new_pos.x + width) >= re.Right) then
+  begin
+    new_pos.x := re.Right - width;
+  end; // if ((new_pos.x + Form.Width + 2 * Form.BorderWidth) >= re.Right)
+
+  if ((new_pos.y + height) >= re.Bottom) then
+  begin
+    new_pos.y := re.Bottom - height;
+  end; // if ((new_pos.y + Form.Height + 2 * Form.BorderWidth) >= re.Bottom)
+
+  Form.Left := new_pos.x;
+  Form.Top := new_pos.y;
+end;
+
+procedure CenterFormOnWorkingMonitor(Form: TForm);
 var
   re: TRECT;
 begin
